@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0b0a">
+  <meta name="description" content="Ker Nethalas: Into the Midnight Throne — a solo dungeon crawler.">
+  <title>Ker Nethalas</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Title screen -->
+    <section id="title-screen" class="screen">
+      <div class="title-inner">
+        <h1 class="blackletter">Ker Nethalas</h1>
+        <p class="subtitle">Into the Midnight Throne</p>
+        <p class="tagline">You were executed. You woke among the dead. There are fates worse than death.</p>
+        <div class="title-buttons">
+          <button id="btn-continue" class="primary" hidden>Continue</button>
+          <button id="btn-new" class="primary">New Survivor</button>
+          <button id="btn-import" class="secondary">Import save</button>
+          <input type="file" id="import-file" accept=".json,application/json" hidden>
+        </div>
+        <p class="credits">Ker Nethalas: Into the Midnight Throne — Gravebound Edition. Designed and written by Alex T. © 2026 Blackoath Entertainment. Digital adaptation used with permission.</p>
+      </div>
+    </section>
+
+    <!-- Character creation -->
+    <section id="create-screen" class="screen" hidden></section>
+
+    <!-- Game -->
+    <section id="game-screen" class="screen" hidden>
+      <header id="topbar">
+        <div class="tb-name"><span id="tb-name"></span> <span id="tb-level" class="dim"></span></div>
+        <div id="tb-stats" class="tb-stats"></div>
+        <button id="btn-menu" class="icon-btn" aria-label="Menu">☰</button>
+      </header>
+      <div id="layout">
+        <div id="play-col">
+          <section id="scene" aria-live="polite"></section>
+          <section id="prompt"></section>
+          <section id="log-wrap">
+            <div id="log" role="log" aria-live="polite"></div>
+          </section>
+        </div>
+        <aside id="side-col">
+          <nav class="side-tabs" role="tablist">
+            <button data-tab="map" class="active">Map</button>
+            <button data-tab="sheet">Survivor</button>
+            <button data-tab="inv">Inventory</button>
+            <button data-tab="journal">Journal</button>
+          </nav>
+          <div id="side-panel"></div>
+        </aside>
+      </div>
+      <nav id="mobile-tabs" aria-label="Views">
+        <button data-view="play" class="active">Play</button>
+        <button data-view="map">Map</button>
+        <button data-view="sheet">Survivor</button>
+        <button data-view="inv">Bags</button>
+        <button data-view="log">Log</button>
+      </nav>
+    </section>
+
+    <!-- End screens -->
+    <section id="end-screen" class="screen" hidden></section>
+  </div>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card">
+      <div id="modal-body"></div>
+      <div class="modal-actions"><button id="modal-close" class="secondary">Close</button></div>
+    </div>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/ui/app.js"></script>
+</body>
+</html>

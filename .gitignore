@@ -1,0 +1,4 @@
+# The source PDF is large and must not be published with the app.
+*.pdf
+.DS_Store
+Thumbs.db
