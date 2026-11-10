@@ -2,7 +2,9 @@
 import { S, save, hasSave, loadGame, clearSave, exportSave, importSave, settings, saveSettings } from '../state.js';
 import { setIO, io } from '../io.js';
 import { r, rnd } from '../dice.js';
-import { runCreation } from './creation.js';
+import { runCreation, randomSurvivor } from './creation.js';
+import { MASTERY_BY_ID } from '../data/masteries.js';
+import { PERSONAL_GOALS } from '../data/rules.js';
 import { statChips, renderSheet, renderInventory, renderMap, renderJournal, esc } from './panels.js';
 import { pc, maxTough, maxHealth, healWounds, gainSanity } from '../engine/character.js';
 import { newDomain, runGame, moveTo, nodeState, MAP, nodeTitle } from '../engine/explore.js';
@@ -360,6 +362,14 @@ function boot() {
     if (hasSave() && !confirm('Start a new survivor? Your current save will be replaced.')) return;
     show('create-screen');
     runCreation($('#create-screen'), (p) => startNewGame(p), () => show('title-screen'));
+  };
+  $('#btn-random').onclick = () => {
+    if (hasSave() && !confirm('Start a new random survivor? Your current save will be replaced.')) return;
+    const p = randomSurvivor();
+    startNewGame(p);
+    const ms = p.masteries.map((m) => `${MASTERY_BY_ID[m.id].name} (trained at ${m.training})`).join(' & ');
+    io.log(`<b>Random survivor:</b> ${esc(p.name)}, accused of ${esc(p.crime)}. ${esc(p.appearance)}`, 'info');
+    io.log(`Masteries: ${ms}${p.dedication ? `; Dedication: ${p.dedication}` : ''}. Personal Goals: ${p.goals.map((gl) => PERSONAL_GOALS.find((x) => x.id === gl.id).name).join(', ')}. See the Survivor tab for full details.`, 'info');
   };
   $('#btn-import').onclick = () => $('#import-file').click();
   $('#import-file').onchange = async (e) => {

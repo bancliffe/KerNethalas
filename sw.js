@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Bump VERSION when files change.
-const VERSION = 'kn-v3';
+const VERSION = 'kn-v4';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/style.css', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
   './js/dice.js', './js/io.js', './js/state.js',

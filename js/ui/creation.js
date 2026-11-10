@@ -159,3 +159,36 @@ export function runCreation(root, onDone, onCancel) {
   }
   render();
 }
+
+// ------------------------------------------------------------------ random survivor
+const FIRST = ['Mara', 'Edric', 'Sela', 'Corvin', 'Ilse', 'Tobias', 'Wren', 'Aldous', 'Brielle', 'Garrick', 'Hesper', 'Jorund', 'Liesl', 'Osric', 'Rowena', 'Silas', 'Thea', 'Ulric', 'Vesna', 'Anselm', 'Isolde', 'Bram', 'Odile', 'Fenwick'];
+const LAST = ['Voss', 'Ashgrave', 'Morrow', 'Blackwell', 'Thorne', 'Halloran', 'Crane', 'Mirefield', 'Sallow', 'Grimm', 'Locke', 'Varn', 'Dunmore', 'Hask', 'Rook', 'Elsing'];
+const APPEAR = ['Gaunt and hollow-eyed, with rope burns still raw around the neck.', 'Broad-shouldered and scarred, missing two fingers on the left hand.', 'Wiry and quick, hair matted with grave dirt.', 'Pale and soft-spoken, with ink-stained fingertips.', 'Weathered and grey at the temples, eyes sharp as flint.', 'Young and restless, a thief\'s brand on one wrist.'];
+const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = rnd(i + 1) - 1; [b[i], b[j]] = [b[j], b[i]]; } return b; };
+
+/** Build a complete survivor with every creation choice made at random. */
+export function randomSurvivor() {
+  const p = newPC();
+  p.name = `${FIRST[rnd(FIRST.length) - 1]} ${LAST[rnd(LAST.length) - 1]}`;
+  p.appearance = APPEAR[rnd(APPEAR.length) - 1];
+  p.crime = CRIMES[rnd(20) - 1][0];
+  const attrs = { health: r('D6+10'), tough: r('3D6+20'), aether: r('D6+8'), sanity: r('D6+10') };
+  p.base = { ...attrs };
+  p.health = attrs.health; p.tough = attrs.tough; p.aether = attrs.aether; p.sanity = attrs.sanity;
+  // Skill allotments: +60 and +40 to two weapon Skills, then 30/30/30/20/20/10/10/10 to other Skills
+  const allot = {};
+  const ws = shuffle(WEAPON_SKILLS);
+  allot[ws[0]] = 60; allot[ws[1]] = 40;
+  const rest = shuffle(SKILLS.filter((s) => !(s in allot)));
+  [30, 30, 30, 20, 20, 10, 10, 10].forEach((v, i) => { allot[rest[i]] = v; });
+  for (const s of SKILLS) p.skills[s] = (SKILL_BASE[s] || 0) + (allot[s] || 0);
+  const res40 = RESISTANCES[rnd(3) - 1];
+  for (const k of RESISTANCES) p.res[k] = k === res40 ? 40 : 20;
+  // Two different Masteries, each with a rolled training location
+  const ms = shuffle(MASTERIES).slice(0, 2);
+  p.masteries = ms.map((m) => ({ id: m.id, tier: 1, training: m.training[rnd(6) - 1] }));
+  if (ms.some((m) => m.id === 'weaponmaster')) { const names = Object.keys(WEAPONS); p.dedication = names[rnd(names.length) - 1]; }
+  if (ms.some((m) => m.id === 'umbra')) p.sanity += 5;
+  p.goals = shuffle(PERSONAL_GOALS).slice(0, 2).map((gl) => ({ id: gl.id }));
+  return p;
+}
