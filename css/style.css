@@ -134,7 +134,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 #scene .kind { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
 #scene .desc { color: #cdbfa9; font-style: italic; margin: 6px 0 0; max-height: 7.5em; overflow: auto; }
 
-#prompt { padding: 8px 16px 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg2); flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+#prompt { padding: 8px 16px 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg2); flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 #prompt .q { margin: 2px 0 8px; }
 .recap { margin: 2px 0 10px; padding: 6px 10px; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 6px; max-height: 40vh; overflow-y: auto; text-align: left; }
 .recap .recap-h { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin-bottom: 2px; }
