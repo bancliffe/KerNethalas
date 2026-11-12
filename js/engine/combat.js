@@ -1125,8 +1125,10 @@ async function pcActionMenu() {
   opts.push({ label: 'Swap weapon…', value: { t: 'swap' }, disabled: !canAct, group: 'item' });
   if (p.light?.src === 'Lamp' && !c.lampDown) opts.push({ label: 'Set your Lamp down (frees your off-hand)', value: { t: 'lamp' }, disabled: !canAct, group: 'item' });
   opts.push({ label: 'Flee to the previous room (Dodge)', value: { t: 'flee' }, disabled: !canAct || g().domain.prev == null, group: 'flee', cls: 'warn' });
-  opts.push({ label: c.std > 0 ? 'End turn' : 'End turn (no actions left)', value: 'end', cls: 'secondary', group: 'end' });
   const st = `Your turn — ${c.std} Standard, ${c.free} Free action${c.free === 1 ? '' : 's'} left.`;
+  // Nothing usable left: show only End turn instead of a wall of disabled buttons.
+  if (!opts.some((o) => !o.disabled)) return io.choose(`${st} Nothing else you can do this turn.`, [{ label: 'End turn', value: 'end', cls: 'primary' }], { combat: true });
+  opts.push({ label: c.std > 0 ? 'End turn' : 'End turn (no actions left)', value: 'end', cls: 'secondary', group: 'end' });
   return io.choose(st, opts, { combat: true });
 }
 
