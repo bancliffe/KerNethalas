@@ -48,9 +48,6 @@
         <div id="play-col">
           <section id="scene" aria-live="polite"></section>
           <section id="prompt"></section>
-          <section id="log-wrap">
-            <div id="log" role="log" aria-live="polite"></div>
-          </section>
         </div>
         <aside id="side-col">
           <nav class="side-tabs" role="tablist">
@@ -58,8 +55,12 @@
             <button data-tab="sheet">Survivor</button>
             <button data-tab="inv">Inventory</button>
             <button data-tab="journal">Journal</button>
+            <button data-tab="history">History</button>
           </nav>
           <div id="side-panel"></div>
+          <section id="log-wrap" hidden>
+            <div id="log" role="log" aria-label="Adventure history"></div>
+          </section>
         </aside>
       </div>
       <nav id="mobile-tabs" aria-label="Views">
@@ -67,7 +68,7 @@
         <button data-view="map">Map</button>
         <button data-view="sheet">Survivor</button>
         <button data-view="inv">Bags</button>
-        <button data-view="log">Log</button>
+        <button data-view="log">History</button>
       </nav>
     </section>
 

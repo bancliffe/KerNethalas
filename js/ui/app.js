@@ -5,7 +5,7 @@ import { r, rnd } from '../dice.js';
 import { runCreation, randomSurvivor } from './creation.js';
 import { MASTERY_BY_ID } from '../data/masteries.js';
 import { PERSONAL_GOALS } from '../data/rules.js';
-import { statChips, renderSheet, renderInventory, renderMap, renderJournal, esc } from './panels.js';
+import { statChips, statTip, renderSheet, renderInventory, renderMap, renderJournal, esc } from './panels.js';
 import { pc, maxTough, maxHealth, maxAether, maxSanity, healWounds, gainSanity } from '../engine/character.js';
 import { newDomain, runGame, moveTo, nodeState, MAP, nodeTitle } from '../engine/explore.js';
 import { neighbors } from '../data/domain1.js';
@@ -133,6 +133,7 @@ function renderScene() {
 
 function renderTopbar() {
   const p = pc();
+  hideTip();
   $('#tb-name').textContent = p.name;
   $('#tb-level').textContent = `Lv ${p.level}`;
   $('#tb-stats').innerHTML = statChips();
@@ -152,6 +153,7 @@ function renderSide() {
   const tab = window.innerWidth >= 1000 ? sideTab : mobileView;
   if (!host) return;
   if (window.innerWidth < 1000 && (mobileView === 'play' || mobileView === 'log')) return;
+  if (window.innerWidth >= 1000 && sideTab === 'history') return;
   host.innerHTML = panelHTML(tab);
 }
 
@@ -218,22 +220,67 @@ async function useFragmentExplore(id) {
 function setMobileView(v) {
   mobileView = v;
   const gs = $('#game-screen');
-  gs.classList.toggle('view-other', !['play', 'log'].includes(v));
-  gs.classList.toggle('view-log', v === 'log');
+  gs.classList.toggle('view-other', v !== 'play');
   document.querySelectorAll('#mobile-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
+  syncHistory();
   renderSide();
   if (v === 'log') { const w = $('#log-wrap'); w.scrollTop = 0; }
 }
 function bindTabs() {
   document.querySelectorAll('.side-tabs button').forEach((b) => {
-    b.onclick = () => { sideTab = b.dataset.tab; document.querySelectorAll('.side-tabs button').forEach((x) => x.classList.toggle('active', x === b)); renderSide(); };
+    b.onclick = () => {
+      sideTab = b.dataset.tab; document.querySelectorAll('.side-tabs button').forEach((x) => x.classList.toggle('active', x === b));
+      syncHistory(); renderSide();
+      if (sideTab === 'history') $('#log-wrap').scrollTop = 0;
+    };
   });
   document.querySelectorAll('#mobile-tabs button').forEach((b) => { b.onclick = () => setMobileView(b.dataset.view); });
   // mobile panel host
   const host = document.createElement('div'); host.id = 'mobile-panel-host';
   host.innerHTML = '<div id="mobile-panel"></div>';
   $('#layout').appendChild(host);
-  window.addEventListener('resize', () => renderSide());
+  syncHistory();
+  window.addEventListener('resize', () => { syncHistory(); renderSide(); });
+}
+/** The History (log) pane lives in the side column on desktop and in the mobile panel host on phones. */
+function syncHistory() {
+  const desk = window.innerWidth >= 1000;
+  const w = $('#log-wrap');
+  const target = desk ? $('#side-col') : $('#mobile-panel-host');
+  if (target && w.parentElement !== target) target.appendChild(w);
+  const show = desk ? sideTab === 'history' : mobileView === 'log';
+  w.hidden = !show;
+  $('#side-panel').hidden = desk && show;
+  const mp = $('#mobile-panel'); if (mp) mp.hidden = !desk && show;
+}
+
+// ------------------------------------------------------------------ stat tooltips
+// One floating tooltip (position: fixed, so the sideways-scrolling stat row cannot clip it).
+// Mouse: hover. Touch: tap to toggle. Keyboard: focus.
+let tipFor = null;
+function showTip(chip) {
+  const tip = $('#stat-tip'); const html = statTip(chip.dataset.k);
+  if (!html) return;
+  tipFor = chip; tip.innerHTML = html; tip.hidden = false;
+  const r0 = chip.getBoundingClientRect(); const w = tip.offsetWidth;
+  tip.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r0.left + r0.width / 2 - w / 2))}px`;
+  tip.style.top = `${r0.bottom + 8}px`;
+}
+function hideTip() { tipFor = null; const tip = $('#stat-tip'); if (tip) tip.hidden = true; }
+function bindStatTips() {
+  const tip = document.createElement('div'); tip.id = 'stat-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;
+  document.body.appendChild(tip);
+  const bar = $('#tb-stats');
+  const chipOf = (e) => e.target.closest?.('.stat[data-k]');
+  bar.addEventListener('pointerover', (e) => { const c = chipOf(e); if (c && e.pointerType === 'mouse') showTip(c); });
+  bar.addEventListener('pointerout', (e) => { const c = chipOf(e); if (c && e.pointerType === 'mouse' && !c.contains(e.relatedTarget)) hideTip(); });
+  bar.addEventListener('click', (e) => { const c = chipOf(e); if (!c || e.pointerType === 'mouse') return; if (tipFor === c) hideTip(); else showTip(c); });
+  bar.addEventListener('focusin', (e) => { const c = chipOf(e); if (c) showTip(c); });
+  bar.addEventListener('focusout', hideTip);
+  bar.addEventListener('scroll', hideTip, { passive: true });
+  document.addEventListener('pointerdown', (e) => { if (tipFor && !chipOf(e)) hideTip(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
+  window.addEventListener('resize', hideTip);
 }
 
 // ------------------------------------------------------------------ toast & modal & menu
@@ -431,7 +478,7 @@ function applySnap(prev, cur, anim) {
     if (anim && pu && pu.hp !== u.hp) { const d = Math.max(0, u.hp) - Math.max(0, pu.hp); if (d) { floatNum(card, d); flash(card, d); } }
   }
   for (const [k, v] of Object.entries(cur.stats)) {
-    const chip = document.querySelector(`#tb-stats .stat[title="${k}"]`); if (!chip) continue;
+    const chip = document.querySelector(`#tb-stats .stat[data-k="${k}"]`); if (!chip) continue;
     const b = chip.querySelector('b'); if (b) b.textContent = v.txt;
     const pv = prev?.stats[k];
     if (anim && pv && pv.n !== v.n) { floatNum(chip, v.n - pv.n); flash(chip, v.n - pv.n); }
@@ -500,7 +547,7 @@ function bindRetry() { const b = $('#retryrun'); if (b) b.onclick = tryAgain; }
 
 // ------------------------------------------------------------------ boot
 function boot() {
-  bindTabs(); bindPanels();
+  bindTabs(); bindPanels(); bindStatTips();
   $('#modal-close').onclick = closeModal;
   $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
   $('#btn-menu').onclick = openMenu;

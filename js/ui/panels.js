@@ -17,7 +17,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 export function statChips() {
   const p = pc(); const g = S.g;
-  const chip = (lbl, v, max, color, warn) => `<span class="stat${warn ? ' warn' : ''}" title="${lbl}"><span class="dot" style="background:${color}"></span><span class="lbl">${lbl}</span> <b>${v}${max != null ? `/${max}` : ''}</b></span>`;
+  const chip = (lbl, v, max, color, warn) => `<span class="stat${warn ? ' warn' : ''}" data-k="${lbl}" tabindex="0" aria-label="${esc(STAT_NAMES[lbl] || lbl)}: ${esc(String(v))}${max != null ? ` of ${max}` : ''}"><span class="dot" style="background:${color}"></span><span class="lbl">${lbl}</span> <b>${v}${max != null ? `/${max}` : ''}</b></span>`;
   const out = [];
   out.push(chip('HP', p.health, maxHealth(), 'var(--health)', p.health <= 3));
   out.push(chip('TGH', p.tough + (p.tempTough ? `+${p.tempTough}` : ''), maxTough(), 'var(--tough)'));
@@ -28,6 +28,29 @@ export function statChips() {
   if (g.domain) out.push(chip('Tension', `d${g.domain.tension}`, null, 'var(--blood)', g.domain.tension <= 4));
   out.push(chip('XP', p.xp, p.level * 1000, 'var(--gold)'));
   return out.join('');
+}
+
+const STAT_NAMES = { HP: 'Health', TGH: 'Toughness', AE: 'Aether', SAN: 'Sanity', EXH: 'Exhaustion', Light: 'Light', Tension: 'Tension Die', XP: 'Experience' };
+
+/** Tooltip HTML explaining a top-bar stat, including what it means for you right now. */
+export function statTip(k) {
+  const p = pc(); const g = S.g;
+  const now = (t) => `<p class="tip-now">${t}</p>`;
+  const temp = (v) => (v ? now(`Includes +${v} temporary, which is lost first.`) : '');
+  switch (k) {
+    case 'HP': return `<h4>Health</h4><p>Serious wounds. Damage comes off Toughness first and only reaches Health once Toughness is gone. <b>At 0 Health you die.</b></p><p>Health is slow to recover: a Breather restores 1, a Camp Rest more.</p>${p.health <= 3 ? now('You are close to death.') : ''}`;
+    case 'TGH': return `<h4>Toughness</h4><p>Bruises, scrapes and fatigue that soak damage before it reaches your Health.</p><p>Recovers easily: a Breather restores D10+2, and a Bandage with a Medicine check restores D4.</p>${temp(p.tempTough)}`;
+    case 'AE': return `<h4>Aether</h4><p>The power that fuels your Mastery Abilities.</p><p>Refills to its maximum whenever you enter a new room. Sustained Abilities reduce your maximum while they last.</p>${temp(p.tempAether)}`;
+    case 'SAN': return `<h4>Sanity</h4><p>Your grip on reality. Horrors, darkness and dark magic wear it down.</p><p><b>At 0 your mind cracks:</b> you roll on the Madness table (a lasting affliction, or even death) and Sanity resets to full.</p>${temp(p.tempSanity)}${p.sanity <= 3 ? now('Madness is close.') : ''}`;
+    case 'EXH': {
+      const bands = EXHAUSTION_TABLE.map(([lo, hi, txt]) => `<li class="${p.exh >= lo && p.exh <= hi ? 'on' : ''}"><b>${hi >= 999 ? `${lo}+` : `${lo}–${hi}`}:</b> ${txt}</li>`).join('');
+      return `<h4>Exhaustion</h4><p>Accumulated strain. It goes up with effort and hardship, and only down when you eat or rest: a Ration removes 1, a Breather 2, a Camp Rest much more.</p><ul class="tip-bands">${bands}</ul>`;
+    }
+    case 'Light': return `<h4>Light</h4><p>Your light source and how many rooms it has left. It burns down by 1 for each room you enter, and by 5 during a Breather.</p><p><b>Without light you are Blinded</b> (Disadvantage on checks other than Reason, basic attacks only, no Mastery Abilities), and each dark room may cost you Sanity.</p>${hasLight() ? '' : now('You are in darkness.')}`;
+    case 'Tension': return `<h4>Tension Die</h4><p>Rolled each time you enter a room, and when you make noise or search deeply. On a 1 or 2 it shrinks: d8 → d6 → d4.</p><p>A 1 or 2 on the d4 makes <b>the darkness grow</b>: a lasting change for the worse in this Domain. The die then resets to d8.</p>${g.domain ? now(`Currently d${g.domain.tension}.`) : ''}`;
+    case 'XP': return `<h4>Experience</h4><p>Earned by defeating foes, exploring and completing goals. Reach your level × 1000 XP to gain a level.</p>${now(`${Math.max(0, p.level * 1000 - p.xp)} XP to level ${p.level + 1}.`)}`;
+    default: return '';
+  }
 }
 
 function bar(label, v, max, color) {
