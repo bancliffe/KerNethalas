@@ -39,7 +39,8 @@ function bar(label, v, max, color) {
 export function renderSheet() {
   const p = pc(); const M = mods(); const w = mainWeapon();
   const conds = Object.entries(p.cond).filter(([k, v]) => v && k[0] === k[0].toUpperCase() && CONDITIONS[k]);
-  const skills = SKILLS.map((s) => {
+  // Highest effective value first; ties keep alphabetical order.
+  const skills = [...SKILLS].sort((a, b) => skillValue(b) - skillValue(a) || a.localeCompare(b)).map((s) => {
     const base = skillBase(s); const eff = skillValue(s);
     return `<div title="${esc(SKILL_TEXT[s])}">${s}${p.improve.includes(s) ? ' <span class="tag">improve</span>' : ''}</div><div class="v">${eff}${eff !== base ? ` <span class="dim">(${base})</span>` : ''}</div>`;
   }).join('');

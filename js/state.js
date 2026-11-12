@@ -1,6 +1,7 @@
 // Global game state + persistence.
 const KEY = 'kernethalas.save.v1';
 const SETTINGS_KEY = 'kernethalas.settings.v1';
+const LAST_PC_KEY = 'kernethalas.lastpc.v1';
 
 export const S = { g: null };
 let uidCounter = 1;
@@ -10,7 +11,7 @@ export const DEFAULT_SETTINGS = {
   askStrain: false,       // prompt to spend Exhaustion for +damage after a hit
   manualDamage: false,    // pick the damage die from the pool yourself
   autoDefense: true,      // automatically choose the best defense (Dodge/Parry)
-  fastDice: false,        // skip dice animation
+  paceEvents: true,       // reveal events one at a time with combat feedback
 };
 
 export function loadSettings() {
@@ -30,6 +31,9 @@ export function loadGame() {
   try { const s = localStorage.getItem(KEY); if (!s) return null; S.g = JSON.parse(s); return S.g; } catch { return null; }
 }
 export function clearSave() { try { localStorage.removeItem(KEY); } catch { /* ignore */ } }
+// Snapshot of the most recent survivor as created (before Hard Beginnings), for "Try Again".
+export function saveLastPC(p) { try { localStorage.setItem(LAST_PC_KEY, JSON.stringify(p)); } catch { /* ignore */ } }
+export function loadLastPC() { try { return JSON.parse(localStorage.getItem(LAST_PC_KEY)) || null; } catch { return null; } }
 export function exportSave() { return JSON.stringify(S.g); }
 export function importSave(txt) { const g = JSON.parse(txt); if (!g || !g.pc) throw new Error('Invalid save'); S.g = g; save(); return g; }
 

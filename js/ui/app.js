@@ -1,12 +1,12 @@
 // App shell: screens, the UI side of the engine bridge, panels and menus.
-import { S, save, hasSave, loadGame, clearSave, exportSave, importSave, settings, saveSettings } from '../state.js';
+import { S, save, hasSave, loadGame, clearSave, exportSave, importSave, settings, saveSettings, saveLastPC, loadLastPC } from '../state.js';
 import { setIO, io } from '../io.js';
 import { r, rnd } from '../dice.js';
 import { runCreation, randomSurvivor } from './creation.js';
 import { MASTERY_BY_ID } from '../data/masteries.js';
 import { PERSONAL_GOALS } from '../data/rules.js';
 import { statChips, renderSheet, renderInventory, renderMap, renderJournal, esc } from './panels.js';
-import { pc, maxTough, maxHealth, healWounds, gainSanity } from '../engine/character.js';
+import { pc, maxTough, maxHealth, maxAether, maxSanity, healWounds, gainSanity } from '../engine/character.js';
 import { newDomain, runGame, moveTo, nodeState, MAP, nodeTitle } from '../engine/explore.js';
 import { neighbors } from '../data/domain1.js';
 import { CREATURES } from '../data/creatures.js';
@@ -19,6 +19,7 @@ const screens = ['title-screen', 'create-screen', 'game-screen', 'end-screen'];
 function show(id) { for (const s of screens) $(`#${s}`).hidden = s !== id; }
 
 let pending = null;   // { resolve, opts }
+let recap = [];       // log entries since the player's last decision, shown above the next prompt
 let sideTab = 'map';
 let mobileView = 'play';
 
@@ -38,6 +39,7 @@ const GROUP_LABELS = { move: 'Go', special: 'Here', room: 'Search', rest: 'Rest 
 const impl = {
   log(html, cls) {
     appendLog(html, cls);
+    recap.push({ h: html, c: cls, s: snap() }); if (recap.length > 60) recap.shift();
     if (S.g) { S.g.log = S.g.log || []; S.g.log.push([html, cls]); if (S.g.log.length > LOG_MAX) S.g.log.splice(0, S.g.log.length - LOG_MAX); }
   },
   choose(prompt, options, opts = {}) {
@@ -45,6 +47,7 @@ const impl = {
       pending = { resolve, opts };
       renderPrompt(prompt, options, opts);
       refreshAll();
+      beginReveal($('#prompt'));
     });
   },
   refresh() { refreshAll(); },
@@ -53,9 +56,19 @@ const impl = {
 };
 setIO(impl);
 
+/** Chronological feed of what happened since the last decision. pending: rows start hidden for a paced reveal. */
+const recapRows = () => recap.filter((e) => e.c !== 'title');
+function recapHTML(title = 'What happened', pending = false) {
+  const rows = recapRows();
+  if (!rows.length) return '';
+  return `<div class="recap" aria-label="${title}"><div class="recap-h">${title}${pending ? '<span class="recap-skip">tap to skip ▸</span>' : ''}</div>${rows.map((e) => `<div class="e ${e.c}${pending ? ' pending' : ''}">${e.h}</div>`).join('')}</div>`;
+}
+const pacing = () => settings.paceEvents && !reduceMotion();
+
 function renderPrompt(prompt, options, opts) {
   const el = $('#prompt');
-  let html = `<div class="q">${prompt}</div>`;
+  stopReveal();
+  let html = `${recapHTML('What happened', pacing())}<div class="q">${prompt}</div>`;
   const groups = []; const byGroup = {};
   for (const o of options) { const gk = o.group || '_'; if (!byGroup[gk]) { byGroup[gk] = []; groups.push(gk); } byGroup[gk].push(o); }
   const compact = options.length <= 3 && options.every((o) => (o.label || '').length < 40) && !opts.explore;
@@ -75,6 +88,7 @@ function renderPrompt(prompt, options, opts) {
       if (!pending) return;
       const o = options[+b.dataset.i];
       const res = pending.resolve; pending = null;
+      clearRecap();
       el.innerHTML = '<div class="q dim">…</div>';
       res(o.value);
     };
@@ -86,6 +100,7 @@ function renderPrompt(prompt, options, opts) {
 function external(fn) {
   if (pending && pending.opts.allowExternal) {
     const res = pending.resolve; pending = null;
+    clearRecap();
     $('#prompt').innerHTML = '<div class="q dim">…</div>';
     res({ external: true, run: fn });
     return true;
@@ -104,7 +119,7 @@ function renderScene() {
     const allies = (pc().minions || []).filter((m) => m.hp > 0);
     const card = (u, ally) => {
       const conds = Object.entries(u.cond).filter(([k, v]) => v && CONDITIONS[k]).map(([k, v]) => `<span class="cond" title="${esc(CONDITIONS[k])}">${k}${typeof v === 'number' ? ` ${v}` : ''}</span>`).join('');
-      return `<div class="foe${ally ? ' ally' : ''}"><div class="n">${esc(u.name)}</div><div class="hp"><i style="width:${Math.max(0, (u.hp / u.maxHp) * 100)}%"></i></div><div class="note">${u.hp}/${u.maxHp} HP${ally ? '' : ` · Combat ${u.combat}`}</div><div class="conds">${conds}</div></div>`;
+      return `<div class="foe${ally ? ' ally' : ''}" data-uid="${esc(String(u.uid))}"><div class="n">${esc(u.name)}</div><div class="hp"><i style="width:${Math.max(0, (u.hp / u.maxHp) * 100)}%"></i></div><div class="note"><span class="hpt">${u.hp}/${u.maxHp} HP</span>${ally ? '' : ` · Combat ${u.combat}`}</div><div class="conds">${conds}</div></div>`;
     };
     el.innerHTML = `<div class="kind">Combat — round ${g.combat.round}</div><h2>${esc(nodeTitle(g.domain.cur))}</h2>
       <div class="foes">${foes.map((u) => card(u, false)).join('')}${allies.map((u) => card(u, true)).join('')}</div>`;
@@ -241,6 +256,7 @@ function openMenu() {
       <label><input type="checkbox" id="set-auto" ${settings.autoDefense ? 'checked' : ''}> <span>Automatically choose the best defense (Dodge or Parry) when you have no reaction abilities.</span></label>
       <label><input type="checkbox" id="set-manual" ${settings.manualDamage ? 'checked' : ''}> <span>Pick the damage die from your Damage Pool yourself (otherwise the best die is chosen).</span></label>
       <label><input type="checkbox" id="set-strain" ${settings.askStrain ? 'checked' : ''}> <span>After each hit, ask whether to spend Exhaustion for extra damage (+1 damage per 2 Exhaustion).</span></label>
+      <label><input type="checkbox" id="set-pace" ${settings.paceEvents ? 'checked' : ''}> <span>Reveal events one at a time, with health bars and damage numbers following along (tap to skip).</span></label>
     </div>
     <div class="menu-list">
       <button class="secondary" id="m-export">Export save file</button>
@@ -248,7 +264,7 @@ function openMenu() {
     </div>
     <p class="note">Your progress is saved automatically on this device.</p>`);
   const bindSet = (id, key) => { $(id).onchange = (e) => { settings[key] = e.target.checked; saveSettings(settings); }; };
-  bindSet('#set-auto', 'autoDefense'); bindSet('#set-manual', 'manualDamage'); bindSet('#set-strain', 'askStrain');
+  bindSet('#set-auto', 'autoDefense'); bindSet('#set-manual', 'manualDamage'); bindSet('#set-strain', 'askStrain'); bindSet('#set-pace', 'paceEvents');
   $('#m-export').onclick = () => {
     const blob = new Blob([exportSave()], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `kernethalas-${(pc().name || 'save').replace(/\W+/g, '_')}.json`; a.click();
@@ -261,6 +277,7 @@ function openMenu() {
 
 // ------------------------------------------------------------------ game start / loop
 function startNewGame(p) {
+  saveLastPC(p);
   S.g = { version: 1, pc: p, domain: null, combat: null, log: [], over: false, created: Date.now() };
   S.g.domain = newDomain();
   // Hard beginnings
@@ -286,6 +303,7 @@ function startNewGame(p) {
 function enterGame() {
   show('game-screen');
   $('#log').innerHTML = '';
+  clearRecap();
   for (const [h, c] of S.g.log || []) appendLog(h, c);
   setMobileView('play');
   refreshAll();
@@ -304,7 +322,9 @@ async function loop() {
 
 async function death(cause) {
   const p = pc();
+  if (recapRows().length && pacing()) await playRecap();
   appendLog(`<b>You have died</b> (${esc(cause)}).`, 'bad');
+  const finalMoments = recapHTML('Your final moments');
   S.g.dead = cause;
   save();
   const canRevive = cause !== 'the Rot' && cause !== 'madness';
@@ -312,12 +332,14 @@ async function death(cause) {
   end.innerHTML = `<div class="end-inner"><h1>Your journey ends</h1>
     <p><i>${esc(p.name)} has fallen to ${esc(cause)}, deep within the Midnight Throne. Or at least, as dead as anything else in the necropolis...</i></p>
     <p class="note">Level ${p.level} · ${p.xp} XP · ${p.stats.kills || 0} foes slain · reached Domain ${S.g.domain.num || 1}</p>
+    ${finalMoments}
     ${canRevive ? `<div class="card" style="text-align:left"><h3>Optional rule: Overcoming Death</h3>
       <p>Immediately recover 2D6 Sanity, 2D6 Health, and your full Toughness. If you died at the hands of your enemies, they've moved on and lost interest, taking you for dead. You lose 2 Mastery Abilities of your choosing, but you cannot end up with less than 1 Ability per Mastery this way.</p>
       <button class="primary" id="revive">Rise again</button></div>` : ''}
-    <div class="title-buttons" style="margin-top:16px"><button class="secondary" id="newrun">Create a new survivor</button></div></div>`;
+    <div class="title-buttons" style="margin-top:16px">${retryButton()}<button class="secondary" id="newrun">Create a new survivor</button></div></div>`;
   show('end-screen');
   $('#newrun').onclick = () => { clearSave(); location.reload(); };
+  bindRetry();
   if (canRevive) $('#revive').onclick = () => {
     const G = S.g;
     if (G.combat) { const node = nodeState(G.combat.nodeId); node.cleared = true; node.enemies = null; G.combat = null; }
@@ -337,11 +359,144 @@ function victory() {
     <p><i>You lower yourself over the edge and drop into the darkness below. There is no way back up. ${esc(p.name)} descends deeper into Ker Nethalas...</i></p>
     <p class="note">Level ${p.level} · ${p.xp} XP · ${p.stats.kills || 0} foes slain · ${S.g.domain.overseerDefeated ? 'Overseer slain' : 'Overseer left alive'} · ${S.g.domain.moves} rooms traversed</p>
     <div class="card" style="text-align:left"><p>This first version covers the First Domain of the necropolis. Deeper Domains, generated room by room with the full bestiary, will follow in a future update. Your survivor has been saved.</p></div>
-    <div class="title-buttons" style="margin-top:16px"><button class="secondary" id="newrun">Create a new survivor</button><button class="secondary" id="backrun">Back to the title screen</button></div></div>`;
+    <div class="title-buttons" style="margin-top:16px">${retryButton()}<button class="secondary" id="newrun">Create a new survivor</button><button class="secondary" id="backrun">Back to the title screen</button></div></div>`;
   show('end-screen');
   $('#newrun').onclick = () => { clearSave(); location.reload(); };
+  bindRetry();
   $('#backrun').onclick = () => location.reload();
 }
+
+// ------------------------------------------------------------------ recap pacing & combat feedback
+// Each log entry carries a snapshot of HP/stat values taken when it was logged. The reveal steps through
+// the entries one at a time, moving health bars and stat chips to each snapshot and floating the change.
+let recapBase = null;   // snapshot when the current recap started (just after the player's last decision)
+let reveal = null;      // in-progress reveal: { timer, finish, onDone }
+let settleTimer = null;
+const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+function snap() {
+  try {
+    const g = S.g; if (!g?.pc) return null;
+    const p = g.pc; const units = [];
+    if (g.combat) {
+      for (const u of g.combat.units) units.push({ uid: String(u.uid), name: u.name, hp: u.hp, maxHp: u.maxHp, ally: u.side === 'ally' });
+      for (const m of p.minions || []) if (!units.some((x) => x.uid === String(m.uid))) units.push({ uid: String(m.uid), name: m.name, hp: m.hp, maxHp: m.maxHp, ally: true });
+    }
+    const st = (v, t, max) => ({ n: v + (t || 0), txt: `${v}${t ? `+${t}` : ''}/${max}` });
+    return { units, stats: { HP: st(p.health, 0, maxHealth()), TGH: st(p.tough, p.tempTough, maxTough()), AE: st(p.aether, p.tempAether, maxAether()), SAN: st(p.sanity, p.tempSanity, maxSanity()) } };
+  } catch { return null; }
+}
+function clearRecap() { recap = []; recapBase = snap(); }
+function stopReveal() {
+  if (reveal) { clearTimeout(reveal.timer); reveal = null; }
+  clearTimeout(settleTimer);
+  const el = $('#prompt'); el.classList.remove('revealing'); el.onclick = null;
+}
+
+function foeCard(box, u) {
+  let card = box.querySelector(`.foe[data-uid="${CSS.escape(u.uid)}"]`);
+  if (!card) {
+    card = document.createElement('div');
+    card.className = `foe${u.ally ? ' ally' : ''}`; card.dataset.uid = u.uid;
+    card.innerHTML = `<div class="n">${esc(u.name)}</div><div class="hp"><i></i></div><div class="note"><span class="hpt"></span></div><div class="conds"></div>`;
+    box.appendChild(card);
+  }
+  return card;
+}
+function setCard(card, u) {
+  const bar = card.querySelector('.hp > i'); if (bar) bar.style.width = `${Math.max(0, (u.hp / u.maxHp) * 100)}%`;
+  const t = card.querySelector('.hpt'); if (t) t.textContent = `${Math.max(0, u.hp)}/${u.maxHp} HP`;
+  card.classList.toggle('fallen', u.hp <= 0);
+}
+function floatNum(el, delta) {
+  const f = document.createElement('span');
+  f.className = `fx-float ${delta < 0 ? 'down' : 'up'}`; f.textContent = delta > 0 ? `+${delta}` : `${delta}`;
+  f.addEventListener('animationend', () => f.remove());
+  el.appendChild(f);
+  setTimeout(() => f.remove(), 1500);
+}
+function flash(el, delta) {
+  el.classList.remove('flash-down', 'flash-up'); void el.offsetWidth;
+  el.classList.add(delta < 0 ? 'flash-down' : 'flash-up');
+}
+/** Show snapshot `cur` on the foe cards and stat chips; with anim, float and flash what changed since `prev`. */
+function applySnap(prev, cur, anim) {
+  if (!cur) return;
+  let box = $('#scene .foes');
+  if (!box && cur.units.length) { box = document.createElement('div'); box.className = 'foes'; $('#scene').appendChild(box); }
+  for (const u of cur.units) {
+    const pu = prev?.units.find((x) => x.uid === u.uid);
+    if (!pu && u.hp <= 0) continue;
+    const card = foeCard(box, u); setCard(card, u);
+    if (anim && pu && pu.hp !== u.hp) { const d = Math.max(0, u.hp) - Math.max(0, pu.hp); if (d) { floatNum(card, d); flash(card, d); } }
+  }
+  for (const [k, v] of Object.entries(cur.stats)) {
+    const chip = document.querySelector(`#tb-stats .stat[title="${k}"]`); if (!chip) continue;
+    const b = chip.querySelector('b'); if (b) b.textContent = v.txt;
+    const pv = prev?.stats[k];
+    if (anim && pv && pv.n !== v.n) { floatNum(chip, v.n - pv.n); flash(chip, v.n - pv.n); }
+  }
+}
+/** After a reveal, re-render from the real state (drops fallen foes, restores combat-over scenes). */
+function settle() {
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => { if (!reveal && S.g?.pc) { renderTopbar(); renderScene(); } }, 1000);
+}
+/** Step through the recap rows in `host`. Paced: one row at a time (click to skip); otherwise all at once. */
+function beginReveal(host, onDone) {
+  const rows = [...host.querySelectorAll('.recap .e')];
+  const entries = recapRows();
+  if (!rows.length || rows.length !== entries.length) { onDone?.(); return; }
+  const motion = !reduceMotion();
+  // Rewind the visuals to where this recap started.
+  if (recapBase) applySnap(null, { ...recapBase, units: recapBase.units.filter((u) => u.hp > 0) }, false);
+  if (!pacing()) { applySnap(recapBase, entries[entries.length - 1].s, motion); settle(); onDone?.(); return; }
+  host.classList.add('revealing');
+  const list = host.querySelector('.recap');
+  const delay = Math.min(320, Math.max(70, 3500 / rows.length));
+  let i = 0;
+  const finish = () => {
+    if (!reveal) return;
+    clearTimeout(reveal.timer);
+    if (i < rows.length) { rows.forEach((r0) => r0.classList.remove('pending')); applySnap(entries[i - 1]?.s || recapBase, entries[entries.length - 1].s, motion); }
+    host.classList.remove('revealing'); host.onclick = null;
+    const cb = reveal.onDone; reveal = null;
+    settle(); cb?.();
+  };
+  const step = () => {
+    rows[i].classList.remove('pending'); list.scrollTop = list.scrollHeight;
+    applySnap(i ? entries[i - 1].s : recapBase, entries[i].s, true);
+    i += 1;
+    if (i >= rows.length) finish(); else reveal.timer = setTimeout(step, delay);
+  };
+  reveal = { timer: null, finish, onDone };
+  host.onclick = () => reveal?.finish();
+  step();
+}
+/** Play the pending recap in the prompt area with no options (used before the death screen). */
+function playRecap() {
+  return new Promise((res) => {
+    stopReveal();
+    const el = $('#prompt');
+    el.innerHTML = `${recapHTML('What happened', true)}<div class="q dim">…</div>`;
+    beginReveal(el, () => setTimeout(res, 1200));
+  });
+}
+
+// ------------------------------------------------------------------ try again
+const retryTitle = (p) => `Start a new run as ${p.name}, with the same attributes, skills, masteries and goals.`;
+/** Start a fresh run with the last survivor's creation snapshot. */
+function tryAgain() {
+  const p = loadLastPC(); if (!p) return;
+  startNewGame(p);
+  io.log(`<b>Trying again</b> as ${esc(p.name)}, with the same choices as before.`, 'info');
+}
+/** End-screen "Try Again" button markup (empty if no snapshot exists). */
+function retryButton() {
+  const p = loadLastPC();
+  return p ? `<button class="primary" id="retryrun" title="${esc(retryTitle(p))}">Try again as ${esc(p.name)}</button>` : '';
+}
+function bindRetry() { const b = $('#retryrun'); if (b) b.onclick = tryAgain; }
 
 // ------------------------------------------------------------------ boot
 function boot() {
@@ -371,6 +526,16 @@ function boot() {
     io.log(`<b>Random survivor:</b> ${esc(p.name)}, accused of ${esc(p.crime)}. ${esc(p.appearance)}`, 'info');
     io.log(`Masteries: ${ms}${p.dedication ? `; Dedication: ${p.dedication}` : ''}. Personal Goals: ${p.goals.map((gl) => PERSONAL_GOALS.find((x) => x.id === gl.id).name).join(', ')}. See the Survivor tab for full details.`, 'info');
   };
+  const last = loadLastPC();
+  if (last) {
+    const retry = $('#btn-retry');
+    retry.hidden = false;
+    retry.title = retryTitle(last);
+    retry.onclick = () => {
+      if (hasSave() && !confirm(`Try again as ${last.name}? Your current save will be replaced.`)) return;
+      tryAgain();
+    };
+  }
   $('#btn-import').onclick = () => $('#import-file').click();
   $('#import-file').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
