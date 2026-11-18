@@ -473,7 +473,8 @@ function applySnap(prev, cur, anim) {
   if (!box && cur.units.length) { box = document.createElement('div'); box.className = 'foes'; $('#scene').appendChild(box); }
   for (const u of cur.units) {
     const pu = prev?.units.find((x) => x.uid === u.uid);
-    if (!pu && u.hp <= 0) continue;
+    // Only show a fallen card for a unit that dies in this step; foes already dead stay gone.
+    if (u.hp <= 0 && (!pu || pu.hp <= 0)) continue;
     const card = foeCard(box, u); setCard(card, u);
     if (anim && pu && pu.hp !== u.hp) { const d = Math.max(0, u.hp) - Math.max(0, pu.hp); if (d) { floatNum(card, d); flash(card, d); } }
   }
